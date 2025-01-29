@@ -5,11 +5,11 @@ add_storage_constraints!(model, graph,...)
 
 Adds the storage asset constraints to the model.
 """
-function add_storage_constraints!(connection, model, variables, constraints, profiles)
+function add_storage_constraints!(connection, model, variables, expressions, constraints, profiles)
     var_storage_level_rep_period = variables[:storage_level_rep_period]
     var_storage_level_over_clustered_year = variables[:storage_level_over_clustered_year]
 
-    accumulated_energy_capacity = model[:accumulated_energy_capacity]
+    # accumulated_energy_capacity = model[:accumulated_energy_capacity]
 
     ## INTRA-TEMPORAL CONSTRAINTS (within a representative period)
     # - Balance constraint (using the lowest temporal resolution)
@@ -74,6 +74,9 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
             ],
         )
 
+        accumulated_energy_capacity =
+            expressions[:accumulated_energy_capacity].expressions[:energy_capacity]
+
         # - Maximum storage level
         attach_constraint!(
             model,
@@ -91,7 +94,8 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
                     @constraint(
                         model,
                         var_storage_level ≤
-                        max_storage_level_agg * accumulated_energy_capacity[row.year, row.asset],
+                        max_storage_level_agg *
+                        accumulated_energy_capacity[row.acc_energy_capacity_index],
                         base_name = "max_storage_level_rep_period_limit[$(row.asset),$(row.year),$(row.rep_period),$(row.time_block_start):$(row.time_block_end)]"
                     )
                 end for
@@ -116,7 +120,8 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
                     @constraint(
                         model,
                         var_storage_level ≥
-                        min_storage_level_agg * accumulated_energy_capacity[row.year, row.asset],
+                        min_storage_level_agg *
+                        accumulated_energy_capacity[row.acc_energy_capacity_index],
                         base_name = "min_storage_level_rep_period_limit[$(row.asset),$(row.year),$(row.rep_period),$(row.time_block_start):$(row.time_block_end)]"
                     )
                 end for
@@ -184,6 +189,9 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
             ],
         )
 
+        accumulated_energy_capacity =
+            expressions[:accumulated_energy_capacity].expressions[:energy_capacity]
+
         # - Maximum storage level
         attach_constraint!(
             model,
@@ -201,7 +209,8 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
                     @constraint(
                         model,
                         var_storage_level ≤
-                        max_storage_level_agg * accumulated_energy_capacity[row.year, row.asset],
+                        max_storage_level_agg *
+                        accumulated_energy_capacity[row.acc_energy_capacity_index],
                         base_name = "max_storage_level_over_clustered_year_limit[$(row.asset),$(row.year),$(row.period_block_start):$(row.period_block_end)]"
                     )
                 end for (row, var_storage_level) in
@@ -226,7 +235,8 @@ function add_storage_constraints!(connection, model, variables, constraints, pro
                     @constraint(
                         model,
                         var_storage_level ≥
-                        min_storage_level_agg * accumulated_energy_capacity[row.year, row.asset],
+                        min_storage_level_agg *
+                        accumulated_energy_capacity[row.acc_energy_capacity_index],
                         base_name = "min_storage_level_over_clustered_year_limit[$(row.asset),$(row.year),$(row.period_block_start):$(row.period_block_end)]"
                     )
                 end for (row, var_storage_level) in
@@ -248,6 +258,7 @@ function _append_storage_data_to_indices(connection, table_name)
             inflows_profile.profile_name AS inflows_profile_name,
             max_storage_level_profile.profile_name AS max_storage_level_profile_name,
             min_storage_level_profile.profile_name AS min_storage_level_profile_name,
+            expr_acc.index AS acc_energy_capacity_index
         FROM cons_$table_name AS cons
         LEFT JOIN asset
             ON cons.asset = asset.asset
@@ -257,6 +268,9 @@ function _append_storage_data_to_indices(connection, table_name)
         LEFT JOIN asset_milestone
             ON cons.asset = asset_milestone.asset
             AND cons.year = asset_milestone.milestone_year
+        LEFT JOIN expr_accumulated_energy_capacity AS expr_acc
+            ON cons.asset = expr_acc.asset
+            AND cons.year = expr_acc.milestone_year
         LEFT OUTER JOIN assets_profiles AS inflows_profile
             ON cons.asset = inflows_profile.asset
             AND cons.year = inflows_profile.commission_year
