@@ -12,6 +12,7 @@ function create_model!(energy_problem; kwargs...)
         energy_problem.graph,
         sets,
         energy_problem.variables,
+        energy_problem.expressions,
         energy_problem.constraints,
         energy_problem.profiles,
         energy_problem.representative_periods,
@@ -37,6 +38,7 @@ function create_model(
     graph,
     sets,
     variables,
+    expressions,
     constraints,
     profiles,
     representative_periods,
@@ -89,7 +91,7 @@ function create_model(
         graph,
         sets,
         variables,
-        constraints,
+        expressions,
     )
 
     ## Expressions for storage assets
@@ -111,6 +113,7 @@ function create_model(
         connection,
         model,
         variables,
+        expressions,
         constraints,
         profiles,
         graph,
@@ -147,6 +150,7 @@ function create_model(
         connection,
         model,
         variables,
+        expressions,
         constraints,
         profiles,
     )
