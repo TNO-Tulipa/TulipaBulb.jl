@@ -167,9 +167,9 @@ function create_model(
             connection,
             model,
             variables,
+            expressions,
             constraints,
             profiles,
-            sets,
         )
     end
 
