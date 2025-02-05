@@ -13,13 +13,12 @@ function compute_variables_indices(connection)
             :is_charging,
             :storage_level_rep_period,
             :storage_level_over_clustered_year,
-            :flows_investment,
             :assets_investment,
-            :assets_decommission_simple_method,
-            :assets_decommission_compact_method,
-            :flows_decommission_using_simple_method,
+            :assets_decommission,
+            :flows_investment,
+            :flows_decommission,
             :assets_investment_energy,
-            :assets_decommission_energy_simple_method,
+            :assets_decommission_energy,
         )
     )
 
@@ -190,54 +189,41 @@ function _create_variables_tables(connection)
     DuckDB.query(
         connection,
         "CREATE OR REPLACE TEMP SEQUENCE id START 1;
-        CREATE OR REPLACE TABLE var_assets_decommission_simple_method AS
-        SELECT
-            nextval('id') as index,
-            asset.asset,
-            asset_milestone.milestone_year,
-            asset.investment_integer,
-        FROM asset_milestone
-        LEFT JOIN asset
-            ON asset.asset = asset_milestone.asset
-        WHERE
-            asset.investment_method = 'simple'",
-    )
-
-    DuckDB.query(
-        connection,
-        "CREATE OR REPLACE TEMP SEQUENCE id START 1;
-        CREATE OR REPLACE TABLE var_assets_decommission_compact_method AS
+        CREATE OR REPLACE TABLE var_assets_decommission AS
         SELECT
             nextval('id') as index,
             asset_both.asset,
             asset_both.milestone_year,
             asset_both.commission_year,
             asset_both.decommissionable,
+            asset_both.initial_units,
             asset.investment_integer
         FROM asset_both
         LEFT JOIN asset
             ON asset.asset = asset_both.asset
-        WHERE
-            asset_both.decommissionable = true
-            AND asset.investment_method = 'compact'
+        WHERE asset_both.decommissionable
+            AND asset_both.milestone_year != asset_both.commission_year
         ",
     )
 
     DuckDB.query(
         connection,
         "CREATE OR REPLACE TEMP SEQUENCE id START 1;
-        CREATE OR REPLACE TABLE var_flows_decommission_using_simple_method AS
+        CREATE OR REPLACE TABLE var_flows_decommission AS
         SELECT
             nextval('id') as index,
             flow.from_asset,
             flow.to_asset,
-            flow_milestone.milestone_year
-        FROM flow_milestone
+            flow_both.milestone_year,
+            flow_both.commission_year,
+        FROM flow_both
         LEFT JOIN flow
-            ON flow.from_asset = flow_milestone.from_asset
-            AND flow.to_asset = flow_milestone.to_asset
+            ON flow.from_asset = flow_both.from_asset
+            AND flow.to_asset = flow_both.to_asset
         WHERE
             flow.is_transport = true
+            AND flow_both.decommissionable
+            AND flow_both.commission_year != flow_both.milestone_year
         ",
     )
 
@@ -269,19 +255,23 @@ function _create_variables_tables(connection)
     DuckDB.query(
         connection,
         "CREATE OR REPLACE TEMP SEQUENCE id START 1;
-        CREATE OR REPLACE TABLE var_assets_decommission_energy_simple_method AS
+        CREATE OR REPLACE TABLE var_assets_decommission_energy AS
         SELECT
             nextval('id') as index,
             asset.asset,
-            asset_milestone.milestone_year,
+            asset_both.milestone_year,
+            asset_both.commission_year,
             asset.investment_integer_storage_energy,
-        FROM asset_milestone
+        FROM asset_both
         LEFT JOIN asset
-            ON asset.asset = asset_milestone.asset
+            ON asset.asset = asset_both.asset
         WHERE
             asset.storage_method_energy = true
             AND asset.type = 'storage'
-            AND asset.investment_method = 'simple'",
+            AND asset.investment_method = 'simple' -- TODO: Keep this or not?
+            AND asset_both.decommissionable
+            AND asset_both.commission_year != asset_both.milestone_year
+        ",
     )
 
     return

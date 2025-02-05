@@ -12,6 +12,7 @@ function create_model!(energy_problem; kwargs...)
         energy_problem.graph,
         sets,
         energy_problem.variables,
+        energy_problem.expressions,
         energy_problem.constraints,
         energy_problem.profiles,
         energy_problem.representative_periods,
@@ -37,6 +38,7 @@ function create_model(
     graph,
     sets,
     variables,
+    expressions,
     constraints,
     profiles,
     representative_periods,
@@ -84,19 +86,20 @@ function create_model(
 
     ## Expressions for multi-year investment
     @timeit to "create_multi_year_expressions!" create_multi_year_expressions!(
+        connection,
         model,
-        graph,
-        sets,
         variables,
+        expressions,
     )
 
     ## Expressions for storage assets
-    @timeit to "add_storage_expressions!" add_storage_expressions!(model, graph, sets, variables)
+    @timeit to "add_storage_expressions!" add_storage_expressions!(connection, model, expressions)
 
     ## Expressions for the objective function
     @timeit to "add_objective!" add_objective!(
         model,
         variables,
+        expressions,
         graph,
         representative_periods,
         sets,
@@ -108,11 +111,9 @@ function create_model(
     @timeit to "add_capacity_constraints!" add_capacity_constraints!(
         connection,
         model,
-        variables,
+        expressions,
         constraints,
         profiles,
-        graph,
-        sets,
     )
 
     @timeit to "add_energy_constraints!" add_energy_constraints!(
@@ -133,6 +134,7 @@ function create_model(
         connection,
         model,
         variables,
+        expressions,
         constraints,
         profiles,
     )
@@ -145,6 +147,7 @@ function create_model(
         connection,
         model,
         variables,
+        expressions,
         constraints,
         profiles,
     )
@@ -161,9 +164,9 @@ function create_model(
             connection,
             model,
             variables,
+            expressions,
             constraints,
             profiles,
-            sets,
         )
     end
 
