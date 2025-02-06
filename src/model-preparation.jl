@@ -365,13 +365,10 @@ function add_expression_terms_over_clustered_year_constraints!(
 )
     num_rows = size(cons.indices, 1)
     cons.expressions[:outgoing] = Vector{JuMP.AffExpr}(undef, num_rows)
-    cons.expressions[:outgoing] .= JuMP.AffExpr(0.0)
 
     if is_storage_level
         cons.expressions[:incoming] = Vector{JuMP.AffExpr}(undef, num_rows)
-        cons.expressions[:incoming] .= JuMP.AffExpr(0.0)
         cons.expressions[:inflows_profile_aggregation] = Vector{JuMP.AffExpr}(undef, num_rows)
-        cons.expressions[:inflows_profile_aggregation] .= JuMP.AffExpr(0.0)
     end
 
     # TODO: The interaction between year and timeframe is not clear yet, so this is probably wrong
@@ -379,9 +376,16 @@ function add_expression_terms_over_clustered_year_constraints!(
 
     # Incoming, outgoing flows, and profile aggregation
     for row_cons in eachrow(cons.indices)
-        sub_df_map = filter(
-            :period => p -> row_cons.period_block_start <= p <= row_cons.period_block_end,
-            df_map;
+        cons.expressions[:outgoing][row_cons.index] = JuMP.AffExpr(0.0)
+        if is_storage_level
+            cons.expressions[:incoming][row_cons.index] = JuMP.AffExpr(0.0)
+            cons.expressions[:inflows_profile_aggregation][row_cons.index] = JuMP.AffExpr(0.0)
+        end
+
+        sub_df_map = DataFrames.subset(
+            df_map,
+            :period => p -> row_cons.period_block_start .<= p .<= row_cons.period_block_end,
+            :weight => weight -> weight .> 0;
             view = true,
         )
 
@@ -392,43 +396,52 @@ function add_expression_terms_over_clustered_year_constraints!(
             #     continue
             # end
 
-            sub_df_flows = filter(
-                [:from, :year, :rep_period] =>
-                    (from, y, rp) ->
-                        (from, y, rp) == (row_cons.asset, row_map.year, row_map.rep_period),
-                flow.indices;
+            sub_df_flows = DataFrames.subset(
+                flow.indices,
+                :from => from -> from .== row_cons.asset,
+                :year => year -> year .== row_map.year,
+                :rep_period => rep_period -> rep_period .== row_map.rep_period;
                 view = true,
             )
-            sub_df_flows.duration = sub_df_flows.time_block_end - sub_df_flows.time_block_start .+ 1
+
+            duration = sub_df_flows.time_block_end .- sub_df_flows.time_block_start .+ 1
             if is_storage_level
-                cons.expressions[:outgoing][row_cons.index] +=
+                JuMP.add_to_expression!(
+                    cons.expressions[:outgoing][row_cons.index],
+                    row_map.weight,
                     LinearAlgebra.dot(
                         flow.container[sub_df_flows.index],
-                        sub_df_flows.duration ./ sub_df_flows.efficiency,
-                    ) * row_map.weight
+                        duration ./ sub_df_flows.efficiency,
+                    ),
+                )
             else
-                cons.expressions[:outgoing][row_cons.index] +=
-                    LinearAlgebra.dot(flow.container[sub_df_flows.index], sub_df_flows.duration) *
-                    row_map.weight
+                JuMP.add_to_expression!(
+                    cons.expressions[:outgoing][row_cons.index],
+                    row_map.weight,
+                    LinearAlgebra.dot(flow.container[sub_df_flows.index], duration),
+                )
             end
 
             if is_storage_level
                 # TODO: There is some repetition here or am I missing something?
-                sub_df_flows = filter(
-                    [:to, :year, :rep_period] =>
-                        (to, y, rp) ->
-                            (to, y, rp) == (row_cons.asset, row_map.year, row_map.rep_period),
-                    flow.indices;
+                sub_df_flows = DataFrames.subset(
+                    flow.indices,
+                    :to => to -> to .== row_cons.asset,
+                    :year => year -> year .== row_map.year,
+                    :rep_period => rep_period -> rep_period .== row_map.rep_period;
                     view = true,
                 )
-                sub_df_flows.duration =
-                    sub_df_flows.time_block_end - sub_df_flows.time_block_start .+ 1
 
-                cons.expressions[:incoming][row_cons.index] +=
+                duration = sub_df_flows.time_block_end .- sub_df_flows.time_block_start .+ 1
+
+                JuMP.add_to_expression!(
+                    cons.expressions[:incoming][row_cons.index],
+                    row_map.weight,
                     LinearAlgebra.dot(
                         flow.container[sub_df_flows.index],
-                        sub_df_flows.duration .* sub_df_flows.efficiency,
-                    ) * row_map.weight
+                        duration .* sub_df_flows.efficiency,
+                    ),
+                )
 
                 cons.expressions[:inflows_profile_aggregation][row_cons.index] +=
                     profile_aggregation(
